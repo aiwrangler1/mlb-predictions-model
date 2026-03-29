@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MLB Predictions Model v2</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header class="header">
+        <div class="header-left">
+            <svg class="logo" width="32" height="32" viewBox="0 0 32 32" fill="none">
+                <circle cx="16" cy="16" r="14" stroke="currentColor" stroke-width="2"/>
+                <path d="M8 16C8 11.58 11.58 8 16 8" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M16 24C20.42 24 24 20.42 24 16" stroke="var(--accent)" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M10 10L22 22" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 2"/>
+                <circle cx="16" cy="16" r="2.5" fill="var(--accent)"/>
+            </svg>
+            <h1>MLB Model <span class="version">v2</span></h1>
+            <span class="badge">Log5 + Monte Carlo + Adjustments</span>
+        </div>
+        <div class="header-right">
+            <input type="password" id="oddsApiKey" class="api-key-input" placeholder="Odds API Key" title="Enter your The Odds API key">
+            <button class="btn btn-sm" onclick="setOddsApiKey()">Set Key</button>
+            <span class="date-display" id="dateDisplay"></span>
+            <button class="btn btn-sm" onclick="refreshData()">Refresh</button>
+        </div>
+    </header>
+
+    <nav class="nav">
+        <button class="nav-tab active" data-tab="slate" onclick="switchTab('slate')">Today's Slate</button>
+        <button class="nav-tab" data-tab="simulate" onclick="switchTab('simulate')">Game Simulator</button>
+        <button class="nav-tab" data-tab="projections" onclick="switchTab('projections')">DFS Projections</button>
+        <button class="nav-tab" data-tab="edges" onclick="switchTab('edges')">Betting Edges</button>
+    </nav>
+
+    <main class="main">
+        <!-- Today's Slate -->
+        <section id="tab-slate" class="tab-content active">
+            <div class="section-header">
+                <h2>Today's Matchups</h2>
+                <span class="meta" id="slateCount"></span>
+            </div>
+            <div class="games-grid" id="gamesGrid">
+                <div class="loading">Loading today's games...</div>
+            </div>
+        </section>
+
+        <!-- Game Simulator -->
+        <section id="tab-simulate" class="tab-content">
+            <div class="section-header">
+                <h2>Monte Carlo Simulator</h2>
+                <p class="meta">Select a game from Today's Slate to simulate with all adjustments</p>
+            </div>
+            <div id="simResults" class="sim-container">
+                <div class="empty-state">
+                    <p>Click "Simulate" on any game card to run 5,000 Monte Carlo simulations</p>
+                    <p class="meta">Includes park factors, platoon splits, recent form, pitcher workload, and weather</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- DFS Projections -->
+        <section id="tab-projections" class="tab-content">
+            <div class="section-header">
+                <h2>DFS Projections</h2>
+                <div class="controls">
+                    <button class="btn btn-sm btn-primary" id="loadProjections" onclick="loadProjections()">Generate Projections</button>
+                    <select id="posFilter" onchange="filterProjections()">
+                        <option value="all">All Positions</option>
+                    </select>
+                </div>
+            </div>
+            <div id="projectionsTable" class="table-container">
+                <div class="empty-state">
+                    <p>Click "Generate Projections" to simulate all games with full adjustments</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Betting Edges -->
+        <section id="tab-edges" class="tab-content">
+            <div class="section-header">
+                <h2>Betting Edge Finder</h2>
+                <p class="meta">Model vs sportsbook consensus. Set your Odds API key to load live market lines.</p>
+            </div>
+            <div id="edgesTable" class="table-container">
+                <div class="loading">Loading edges...</div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <span>Log5 (Bill James) + Monte Carlo (Mathletics) | Park Factors + Platoon Splits + Form + Workload + Weather | Data: MLB Stats API + The Odds API + Kalshi</span>
+    </footer>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
