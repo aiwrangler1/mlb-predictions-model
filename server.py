@@ -6,7 +6,7 @@ Integrates market odds (Odds API, Kalshi, Polymarket) and model adjustments
 import asyncio
 import math
 import json as json_module
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
 from datetime import date
@@ -37,6 +37,15 @@ from projections import (
     get_bullpen_probs, estimate_starter_innings, clear_proj_cache,
     TEAM_BULLPEN_2025
 )
+# ─── Backtesting ──────────────────────────────────────────────
+try:
+    from backtesting.backtester import log_prediction, record_actuals_for_date
+    from backtesting.analytics import summary_report
+    from backtesting.results_db import get_connection, get_summary_stats, get_predictions_with_actuals
+    BACKTEST_ENABLED = True
+except ImportError:
+    BACKTEST_ENABLED = False
+# ──────────────────────────────────────────────────────────────
 from model_adjustments import (
     get_park_factors, apply_park_factors,
     get_player_handedness, get_platoon_splits, apply_platoon_adjustment,
@@ -131,7 +140,8 @@ async def api_sportsbook_odds():
     return JSONResponse(content=sanitize({"games": odds, "count": len(odds)}))
 # ─── Simulation with Adjustments ──────────────────────────────
 @app.get("/api/simulate/{game_id}")
-async def api_simulate(game_id: int, n_sims: int = 5000, game_date: Optional[str] = None):
+async def api_simulate(game_id: int, n_sims: int = 5000, game_date: Optional[str] = None,
+                       background_tasks: BackgroundTasks = None):
     """Run Monte Carlo simulation with all model adjustments applied."""
     games = await get_schedule(game_date)
     game = None
@@ -395,7 +405,93 @@ async def api_simulate(game_id: int, n_sims: int = 5000, game_date: Optional[str
         "workload": home_workload,
     }
     
+    # ── Log prediction to backtest DB (non-blocking background task) ──
+    if BACKTEST_ENABLED:
+        # Build normalised sim_result for log_prediction
+        _game_info = results.get("game", {})
+        _sim_for_log = {
+            "away_team":      _game_info.get("away_team",  results.get("away_team", "")),
+            "home_team":      _game_info.get("home_team",  results.get("home_team", "")),
+            "away_pitcher":   (results.get("away_pitcher") or {}).get("name"),
+            "home_pitcher":   (results.get("home_pitcher") or {}).get("name"),
+            "away_win_pct":   results.get("away_win_pct", 0.5),
+            "home_win_pct":   results.get("home_win_pct", 0.5),
+            "avg_total":      results.get("total_runs_mean", 0),
+            "avg_away_runs":  results.get("away_runs_mean"),
+            "avg_home_runs":  results.get("home_runs_mean"),
+            "f5_away_pct":    results.get("f5_away_win"),
+            "f5_home_pct":    results.get("f5_home_win"),
+            "f5_draw_pct":    results.get("f5_draw"),
+            "lineup_source":  results.get("lineup_source"),
+            "n_sims":         n_sims,
+            "umpire_name":    (results.get("umpire") or {}).get("name"),
+        }
+        _mkt = results.get("market_odds") or {}
+        _mkt_odds = {
+            "away_ml":   _mkt.get("away_ml"),
+            "home_ml":   _mkt.get("home_ml"),
+            "total_line":_mkt.get("total_line"),
+        }
+        _date = game_date or _game_info.get("game_date") or date.today().isoformat()
+        if background_tasks:
+            background_tasks.add_task(_log_prediction_bg, game_id, _date, _sim_for_log, _mkt_odds)
+        else:
+            asyncio.create_task(_log_prediction_bg(game_id, _date, _sim_for_log, _mkt_odds))
+
     return JSONResponse(content=sanitize(results))
+
+async def _log_prediction_bg(game_id: int, game_date: str, sim_result: dict, market_odds: dict):
+    """Background task: log prediction to backtest DB without blocking the response."""
+    try:
+        log_prediction(game_id, game_date, sim_result, market_odds)
+    except Exception:
+        pass  # Never let backtest logging crash the main API
+
+# ─── Backtest Endpoints ───────────────────────────────────────
+@app.get("/api/backtest/summary")
+async def api_backtest_summary(days: int = 30):
+    """Analytics summary for the last N days."""
+    if not BACKTEST_ENABLED:
+        raise HTTPException(status_code=503, detail="Backtesting module not available")
+    from datetime import timedelta
+    end = date.today().isoformat()
+    start = (date.today() - timedelta(days=days)).isoformat()
+    report = summary_report(start, end)
+    return JSONResponse(content=sanitize(report))
+
+@app.get("/api/backtest/games")
+async def api_backtest_games(start: Optional[str] = None, end: Optional[str] = None, days: int = 14):
+    """Return all resolved predictions in a date range."""
+    if not BACKTEST_ENABLED:
+        raise HTTPException(status_code=503, detail="Backtesting module not available")
+    from datetime import timedelta
+    _end = end or date.today().isoformat()
+    _start = start or (date.today() - timedelta(days=days)).isoformat()
+    conn = get_connection()
+    rows = get_predictions_with_actuals(conn, _start, _end)
+    conn.close()
+    return JSONResponse(content=sanitize({"games": rows, "count": len(rows)}))
+
+@app.get("/api/backtest/db-stats")
+async def api_backtest_db_stats():
+    """Quick stats on the backtest database."""
+    if not BACKTEST_ENABLED:
+        raise HTTPException(status_code=503, detail="Backtesting module not available")
+    conn = get_connection()
+    stats = get_summary_stats(conn)
+    conn.close()
+    return JSONResponse(content=sanitize(stats))
+
+@app.post("/api/backtest/record-actuals")
+async def api_record_actuals(game_date: Optional[str] = None):
+    """Manually trigger result recording for a date (default: yesterday)."""
+    if not BACKTEST_ENABLED:
+        raise HTTPException(status_code=503, detail="Backtesting module not available")
+    from datetime import timedelta
+    _date = game_date or (date.today() - timedelta(days=1)).isoformat()
+    result = await record_actuals_for_date(_date)
+    return JSONResponse(content=sanitize(result))
+
 # ─── DFS Projections ──────────────────────────────────────────
 @app.get("/api/projections")
 async def api_projections(game_date: Optional[str] = None):
