@@ -6,3 +6,4 @@ __pycache__/
 *.csv.gz
 screenshot-*.png
 /static/js/*.map
+data/*.db
