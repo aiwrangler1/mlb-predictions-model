@@ -9,6 +9,8 @@ SCHEMA_PATH = Path(__file__).parent / "schema.sql"
 def get_connection(db_path: str = None) -> sqlite3.Connection:
     """Get SQLite connection, creating DB and tables if needed."""
     path = db_path or str(DB_PATH)
+    db_parent = Path(path).expanduser().resolve().parent
+    db_parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     # Enable WAL for concurrent reads

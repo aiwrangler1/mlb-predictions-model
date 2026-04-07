@@ -409,6 +409,11 @@ async def api_simulate(game_id: int, n_sims: int = 5000, game_date: Optional[str
     if BACKTEST_ENABLED:
         # Build normalised sim_result for log_prediction
         _game_info = results.get("game", {})
+        _adjustments = results.get("adjustments") or {}
+        _umpire = _adjustments.get("umpire") or {}
+        _weather = _adjustments.get("weather") or {}
+        _park = _adjustments.get("park") or {}
+        _consensus = ((results.get("market_odds") or {}).get("consensus")) or {}
         _sim_for_log = {
             "away_team":      _game_info.get("away_team",  results.get("away_team", "")),
             "home_team":      _game_info.get("home_team",  results.get("home_team", "")),
@@ -422,15 +427,16 @@ async def api_simulate(game_id: int, n_sims: int = 5000, game_date: Optional[str
             "f5_away_pct":    results.get("f5_away_win"),
             "f5_home_pct":    results.get("f5_home_win"),
             "f5_draw_pct":    results.get("f5_draw"),
-            "lineup_source":  results.get("lineup_source"),
+            "lineup_source":  _adjustments.get("lineup_source"),
+            "park_factor":    _park.get("run_factor") or _park.get("hr_factor"),
+            "weather_temp":   _weather.get("temp") or _weather.get("temperature"),
             "n_sims":         n_sims,
-            "umpire_name":    (results.get("umpire") or {}).get("name"),
+            "umpire_name":    _umpire.get("name"),
         }
-        _mkt = results.get("market_odds") or {}
         _mkt_odds = {
-            "away_ml":   _mkt.get("away_ml"),
-            "home_ml":   _mkt.get("home_ml"),
-            "total_line":_mkt.get("total_line"),
+            "away_ml":    _consensus.get("away_ml"),
+            "home_ml":    _consensus.get("home_ml"),
+            "total_line": _consensus.get("total"),
         }
         _date = game_date or _game_info.get("game_date") or date.today().isoformat()
         if background_tasks:
