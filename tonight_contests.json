@@ -1,0 +1,20 @@
+{
+  "189455525": {
+    "name": "MLB $7.5k Solo Shot",
+    "field_size": 8917,
+    "cash_rate": 0.25,
+    "first_place_share": 0.10
+  },
+  "189455530": {
+    "name": "MLB $4k Hot Corner",
+    "field_size": 951,
+    "cash_rate": 0.25,
+    "first_place_share": 0.10
+  },
+  "189455531": {
+    "name": "MLB $5k Hot Corner",
+    "field_size": 1981,
+    "cash_rate": 0.25,
+    "first_place_share": 0.10
+  }
+}
