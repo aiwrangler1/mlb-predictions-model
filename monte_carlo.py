@@ -414,8 +414,9 @@ def run_monte_carlo(away_lineup: list, home_lineup: list,
     """
     rng = np.random.default_rng(seed)
     
-    away_wins = 0
-    home_wins = 0
+    away_wins = 0.0
+    home_wins = 0.0
+    ties = 0
     total_runs = []
     away_runs_dist = []
     home_runs_dist = []
@@ -437,9 +438,15 @@ def run_monte_carlo(away_lineup: list, home_lineup: list,
         )
         
         if result["away_score"] > result["home_score"]:
-            away_wins += 1
+            away_wins += 1.0
+        elif result["home_score"] > result["away_score"]:
+            home_wins += 1.0
         else:
-            home_wins += 1
+            # The sim caps extra innings, so unresolved ties should not be
+            # credited as home wins. Split the outcome evenly instead.
+            ties += 1
+            away_wins += 0.5
+            home_wins += 0.5
         
         away_runs_dist.append(result["away_score"])
         home_runs_dist.append(result["home_score"])
@@ -476,7 +483,10 @@ def run_monte_carlo(away_lineup: list, home_lineup: list,
                 "dk_mean": float(np.mean(dk_pts)),
                 "dk_p10": float(np.percentile(dk_pts, 10)),
                 "dk_p25": float(np.percentile(dk_pts, 25)),
+                "dk_p50": float(np.percentile(dk_pts, 50)),
                 "dk_p75": float(np.percentile(dk_pts, 75)),
+                "dk_p85": float(np.percentile(dk_pts, 85)),
+                "dk_p95": float(np.percentile(dk_pts, 95)),
                 "dk_p90": float(np.percentile(dk_pts, 90)),
                 "dk_p99": float(np.percentile(dk_pts, 99)),
                 "dk_std": float(np.std(dk_pts)),
@@ -506,6 +516,7 @@ def run_monte_carlo(away_lineup: list, home_lineup: list,
         "n_sims": n_sims,
         "away_win_pct": away_wins / n_sims,
         "home_win_pct": home_wins / n_sims,
+        "tie_pct": ties / n_sims,
         "away_runs_mean": float(np.mean(away_runs_arr)),
         "home_runs_mean": float(np.mean(home_runs_arr)),
         "total_runs_mean": float(np.mean(total_runs_arr)),
