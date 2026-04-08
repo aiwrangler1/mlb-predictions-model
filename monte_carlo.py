@@ -496,9 +496,9 @@ def run_monte_carlo(away_lineup: list, home_lineup: list,
                 "avg_runs": float(np.mean(runs)),
                 "avg_bb": float(np.mean(bbs)),
                 "avg_sb": float(np.mean(sbs)),
-                "hit_rate": float(np.mean([1 for h in hits if h > 0]) if hits else 0),
-                "hr_rate": float(np.mean([1 for h in hrs if h > 0]) if hrs else 0),
-                "multi_hit_rate": float(np.mean([1 for h in hits if h >= 2]) if hits else 0),
+                "hit_rate": float(np.mean([h > 0 for h in hits]) if hits else 0),
+                "hr_rate": float(np.mean([h > 0 for h in hrs]) if hrs else 0),
+                "multi_hit_rate": float(np.mean([h >= 2 for h in hits]) if hits else 0),
             })
         
         projections.sort(key=lambda x: x["dk_median"], reverse=True)
