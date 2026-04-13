@@ -144,6 +144,99 @@ def roi_report(df: pd.DataFrame, db_path: str = None,
         "by_type": by_type,
     }
 
+def clv_report(start_date: str, end_date: str, db_path: str = None) -> dict:
+    """
+    Closing Line Value analysis.
+    CLV > 0 means our model was on the right side of line movement.
+    Consistent positive CLV is the gold standard for sharp betting models.
+    """
+    conn = get_connection(db_path)
+    rows = conn.execute("""
+        SELECT po.*, p.game_date, p.away_team, p.home_team,
+               p.model_away_win, p.model_home_win, p.model_total,
+               p.mkt_away_ml, p.mkt_home_ml, p.mkt_total_line,
+               a.winner, a.total_runs,
+               os_open.away_ml as open_away_ml, os_open.home_ml as open_home_ml,
+               os_open.total_line as open_total,
+               os_close.away_ml as close_away_ml, os_close.home_ml as close_home_ml,
+               os_close.total_line as close_total
+        FROM prediction_odds po
+        JOIN predictions p ON p.id = po.prediction_id
+        LEFT JOIN actuals a ON p.game_id = a.game_id
+        LEFT JOIN odds_snapshots os_open ON os_open.id = po.odds_snapshot_id
+        LEFT JOIN odds_snapshots os_close ON os_close.id = po.closing_snapshot_id
+        WHERE p.game_date BETWEEN ? AND ?
+    """, (start_date, end_date)).fetchall()
+    conn.close()
+
+    if not rows:
+        return {"games_with_odds": 0}
+
+    data = [dict(r) for r in rows]
+    
+    # CLV metrics
+    clv_values = []
+    for d in data:
+        if d.get("clv_away") is not None:
+            clv_values.append(d["clv_away"])
+        if d.get("clv_home") is not None:
+            clv_values.append(d["clv_home"])
+
+    # Edge at prediction time vs actual outcomes
+    edge_results = []
+    for d in data:
+        if d.get("edge_away_at_pred") and d.get("winner"):
+            edge_results.append({
+                "edge": d["edge_away_at_pred"],
+                "side": "away",
+                "won": d["winner"] == "away",
+            })
+        if d.get("edge_home_at_pred") and d.get("winner"):
+            edge_results.append({
+                "edge": d["edge_home_at_pred"],
+                "side": "home",
+                "won": d["winner"] == "home",
+            })
+
+    # Only count positive-edge bets
+    pos_edge = [e for e in edge_results if e["edge"] > 0]
+    pos_edge_correct = sum(1 for e in pos_edge if e["won"])
+
+    result = {
+        "games_with_odds": len(data),
+        "positive_edge_bets": len(pos_edge),
+        "positive_edge_correct": pos_edge_correct,
+        "positive_edge_accuracy": round(pos_edge_correct / len(pos_edge), 4) if pos_edge else None,
+    }
+
+    if clv_values:
+        result["clv_count"] = len(clv_values)
+        result["avg_clv"] = round(np.mean(clv_values), 4)
+        result["positive_clv_rate"] = round(sum(1 for v in clv_values if v > 0) / len(clv_values), 4)
+
+    return result
+
+
+def daily_performance(start_date: str, end_date: str, db_path: str = None) -> list[dict]:
+    """Day-by-day performance breakdown."""
+    df = load_joined_df(start_date, end_date, db_path)
+    if df.empty:
+        return []
+    
+    results = []
+    for gdate, group in df.groupby("game_date"):
+        ml = ml_accuracy(group)
+        tot_bias = (group["model_total"] - group["total_runs"]).mean()
+        results.append({
+            "date": gdate,
+            "games": len(group),
+            "ml_correct": ml.get("correct", 0),
+            "ml_accuracy": ml.get("accuracy", 0),
+            "total_bias": round(tot_bias, 2),
+        })
+    return results
+
+
 def summary_report(start_date: str, end_date: str, db_path: str = None) -> dict:
     """Full summary report for a date range."""
     df = load_joined_df(start_date, end_date, db_path)
@@ -158,4 +251,6 @@ def summary_report(start_date: str, end_date: str, db_path: str = None) -> dict:
         "edge_accuracy_5pct": edge_accuracy(df, 5.0),
         "calibration": calibration_report(df),
         "roi": roi_report(df, db_path, start_date, end_date),
+        "clv": clv_report(start_date, end_date, db_path),
+        "daily": daily_performance(start_date, end_date, db_path),
     }
