@@ -14,6 +14,11 @@
 - `main`
   - Base branch for all active work
   - Contains the recent merge commit `621bfc9` for backtesting and optimization docs
+- `feature/odds-tracking`
+  - Odds snapshot DB, line movement tracking, CLV analysis, auto_pipeline
+  - New files: schema_v2.sql, odds_tracker.py, auto_pipeline.py
+  - Updated: analytics.py (CLV + daily breakdown)
+  - Ready for review/merge
 - `feature/9-event-model`
   - Planning-only / incomplete experimental work
   - Do not merge into `main` until implementation is complete and validated
