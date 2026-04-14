@@ -4,12 +4,24 @@ for real sportsbook odds comparison against model predictions.
 """
 import httpx
 import asyncio
+import os
 from typing import Optional
 from datetime import datetime, date, timedelta
 
 # ─── The Odds API ──────────────────────────────────────────────
 ODDS_API_BASE = "https://api.the-odds-api.com/v4"
-ODDS_API_KEY = None  # Set via API or env
+# Load from .env file if present, then fall back to env var, then None
+try:
+    from pathlib import Path
+    _env_path = Path(__file__).parent / ".env"
+    if _env_path.exists():
+        for line in _env_path.read_text().splitlines():
+            if "=" in line and not line.startswith("#"):
+                k, v = line.strip().split("=", 1)
+                os.environ.setdefault(k, v)
+except Exception:
+    pass
+ODDS_API_KEY = os.environ.get("ODDS_API_KEY")  # Auto-loaded from .env
 
 # ─── Kalshi ────────────────────────────────────────────────────
 KALSHI_BASE = "https://api.elections.kalshi.com/trade-api/v2"
